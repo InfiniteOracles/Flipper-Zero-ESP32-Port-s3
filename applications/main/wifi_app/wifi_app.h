@@ -8,6 +8,7 @@
 #include <gui/modules/widget.h>
 #include <gui/modules/loading.h>
 #include <gui/modules/text_input.h>
+#include <gui/modules/variable_item_list.h>
 
 #include "scenes/scenes.h"
 #include "wifi_crawler.h"
@@ -25,12 +26,18 @@ typedef enum {
     WifiAppCustomEventApSelected,
     WifiAppCustomEventDeauthToggle,
     WifiAppCustomEventConnect,
+    WifiAppCustomEventSelect,
     WifiAppCustomEventCrawlerDomainEntered,
     WifiAppCustomEventCrawlerStop,
     WifiAppCustomEventHandshakeToggle,
     WifiAppCustomEventHandshakeDeauth,
     WifiAppCustomEventPasswordEntered,
     WifiAppCustomEventBeaconStop,
+    WifiAppCustomEventEvilPortalSsidEntered,
+    WifiAppCustomEventEvilPortalCredCaptured,
+    WifiAppCustomEventEvilPortalCredsValid,
+    WifiAppCustomEventEvilPortalStop,
+    WifiAppCustomEventEvilPortalTogglePause,
 } WifiAppCustomEvent;
 
 typedef enum {
@@ -47,7 +54,33 @@ typedef enum {
     WifiAppViewAirSnitch,
     WifiAppViewNetscan,
     WifiAppViewBeacon,
+    WifiAppViewPortscan,
+    WifiAppViewEvilPortal,
+    WifiAppViewVariableItemList,
+    WifiAppViewEvilPortalCaptured,
 } WifiAppView;
+
+typedef enum {
+    WifiAppEvilPortalTemplateKindBuiltinGoogle,
+    WifiAppEvilPortalTemplateKindBuiltinRouter,
+    WifiAppEvilPortalTemplateKindCustom,
+} WifiAppEvilPortalTemplateKind;
+
+typedef struct {
+    char name[33];                    // dropdown label (filename without .html for custom)
+    char path[160];                   // SD path; empty for built-in templates
+    WifiAppEvilPortalTemplateKind kind;
+    bool verify;                      // run AP-cred verification flow for this template
+} WifiAppEvilPortalTemplateEntry;
+
+#define WIFI_APP_EVIL_PORTAL_MAX_TEMPLATES 16
+
+typedef struct {
+    char user[64];
+    char pwd[64];
+} WifiAppEvilPortalCred;
+
+#define WIFI_APP_EVIL_PORTAL_QUEUE_SIZE 16
 
 typedef enum {
     WifiAppBeaconModeFunny,
@@ -76,6 +109,7 @@ struct WifiApp {
     Widget* widget;
     Loading* loading;
     TextInput* text_input;
+    VariableItemList* variable_item_list;
     View* view_ap_list;
     View* view_deauther;
     View* view_sniffer;
@@ -85,7 +119,11 @@ struct WifiApp {
     View* view_airsnitch;
     View* view_netscan;
     View* view_beacon;
+    View* view_portscan;
+    View* view_evil_portal;
     void* beacon_view_obj;
+    void* evil_portal_view_obj;
+    void* evil_portal_captured_view_obj;
     WifiApRecord* ap_records;
     uint16_t ap_count;
     size_t selected_index;
@@ -103,6 +141,7 @@ struct WifiApp {
     bool handshake_complete;
     uint8_t scanner_next_scene;
     WifiApRecord connected_ap;
+    bool ap_selected;
     WifiAppDeauthMode deauth_mode;
     char password_input[65];
     char crawler_domain[128];
@@ -110,6 +149,17 @@ struct WifiApp {
     uint32_t portscan_target_ip;
     WifiAppBeaconMode beacon_mode;
     char single_ssid[33];
+    char evil_portal_ssid[33];
+    uint8_t evil_portal_channel;
+    WifiAppEvilPortalTemplateEntry evil_portal_templates[WIFI_APP_EVIL_PORTAL_MAX_TEMPLATES];
+    uint8_t evil_portal_template_count;
+    uint8_t evil_portal_template_index;
+    char evil_portal_valid_ssid[33];
+    char evil_portal_valid_pwd[65];
+    WifiAppEvilPortalCred evil_portal_cred_queue[WIFI_APP_EVIL_PORTAL_QUEUE_SIZE];
+    volatile uint8_t evil_portal_cred_head;
+    volatile uint8_t evil_portal_cred_tail;
+    uint32_t evil_portal_cred_total;
 };
 
 static inline const char* wifi_auth_mode_str(int authmode) {

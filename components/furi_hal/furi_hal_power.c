@@ -31,14 +31,7 @@
 #define FURI_HAL_POWER_LOW_BATTERY_THRESHOLD_V  (3.35f)
 #define FURI_HAL_POWER_EMPTY_BATTERY_VOLTAGE_V  (3.27f)
 #define FURI_HAL_POWER_FULL_BATTERY_VOLTAGE_V   (4.20f)
-
-/* Use board-specific ADC divider if defined, otherwise default to 3.0 */
-#ifdef BOARD_ADC_DIVIDER_RATIO
-#define FURI_HAL_POWER_ADC_DIVIDER_RATIO        (BOARD_ADC_DIVIDER_RATIO)
-#else
 #define FURI_HAL_POWER_ADC_DIVIDER_RATIO        (3.0f)
-#endif
-
 #define FURI_HAL_POWER_SAMPLE_REFRESH_US        (250000LL)
 #define FURI_HAL_POWER_CHARGE_LIMIT_MIN_V       (3.840f)
 #define FURI_HAL_POWER_CHARGE_LIMIT_MAX_V       (4.208f)
@@ -62,14 +55,6 @@ typedef struct {
     adc_channel_t adc_channel;
     adc_oneshot_unit_handle_t adc_handle;
     adc_cali_handle_t adc_cali_handle;
-#ifdef BOARD_PIN_BATTERY_TEMP
-    bool ntc_adc_ready;
-    bool ntc_adc_cali_ready;
-    adc_unit_t ntc_adc_unit;
-    adc_channel_t ntc_adc_channel;
-    adc_oneshot_unit_handle_t ntc_adc_handle;
-    adc_cali_handle_t ntc_adc_cali_handle;
-#endif
 } FuriHalPowerState;
 
 typedef struct {
@@ -221,98 +206,6 @@ static void furi_hal_power_ensure_initialized(void) {
         adc_unit, adc_channel, channel_config.atten, &furi_hal_power.adc_cali_handle);
     furi_hal_power.initialized = true;
 }
-
-#ifdef BOARD_PIN_BATTERY_TEMP
-static void furi_hal_power_ntc_init(void) {
-    if(furi_hal_power.ntc_adc_ready) {
-        return;
-    }
-
-    adc_unit_t ntc_adc_unit = ADC_UNIT_1;
-    adc_channel_t ntc_adc_channel = ADC_CHANNEL_0;
-    const esp_err_t map_result =
-        adc_oneshot_io_to_channel(BOARD_PIN_BATTERY_TEMP, &ntc_adc_unit, &ntc_adc_channel);
-    if(map_result != ESP_OK) {
-        ESP_LOGW(TAG, "Unable to map NTC GPIO%u: %s", BOARD_PIN_BATTERY_TEMP, esp_err_to_name(map_result));
-        return;
-    }
-
-    const adc_oneshot_unit_init_cfg_t init_config = {
-        .unit_id = ntc_adc_unit,
-        .ulp_mode = ADC_ULP_MODE_DISABLE,
-    };
-
-    const esp_err_t unit_result =
-        adc_oneshot_new_unit(&init_config, &furi_hal_power.ntc_adc_handle);
-    if(unit_result != ESP_OK) {
-        ESP_LOGW(TAG, "Unable to initialize NTC ADC unit: %s", esp_err_to_name(unit_result));
-        return;
-    }
-
-    const adc_oneshot_chan_cfg_t channel_config = {
-        .atten = ADC_ATTEN_DB_12,
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
-    };
-
-    const esp_err_t channel_result =
-        adc_oneshot_config_channel(furi_hal_power.ntc_adc_handle, ntc_adc_channel, &channel_config);
-    if(channel_result != ESP_OK) {
-        ESP_LOGW(TAG, "Unable to configure NTC ADC channel: %s", esp_err_to_name(channel_result));
-        return;
-    }
-
-    furi_hal_power.ntc_adc_unit = ntc_adc_unit;
-    furi_hal_power.ntc_adc_channel = ntc_adc_channel;
-    furi_hal_power.ntc_adc_ready = true;
-    furi_hal_power.ntc_adc_cali_ready = furi_hal_power_adc_calibration_init(
-        ntc_adc_unit, ntc_adc_channel, channel_config.atten, &furi_hal_power.ntc_adc_cali_handle);
-}
-
-static float furi_hal_power_ntc_read_temperature(void) {
-    if(!furi_hal_power.ntc_adc_ready) {
-        furi_hal_power_ntc_init();
-        if(!furi_hal_power.ntc_adc_ready) {
-            return 25.0f;
-        }
-    }
-
-    int raw_value = 0;
-    if(adc_oneshot_read(furi_hal_power.ntc_adc_handle, furi_hal_power.ntc_adc_channel, &raw_value) != ESP_OK) {
-        return 25.0f;
-    }
-
-    int pin_mv = 0;
-    if(furi_hal_power.ntc_adc_cali_ready) {
-        if(adc_cali_raw_to_voltage(furi_hal_power.ntc_adc_cali_handle, raw_value, &pin_mv) != ESP_OK) {
-            return 25.0f;
-        }
-    } else {
-        pin_mv = (raw_value * 3300) / 4095;
-    }
-
-    /* Calculate NTC resistance from voltage divider */
-    float v_out = (float)pin_mv / 1000.0f;
-    float r_ntc = 0.0f;
-    if(v_out < 3.3f && v_out > 0.0f) {
-        r_ntc = BOARD_BATTERY_NTC_R_PULLUP * v_out / (3.3f - v_out);
-    }
-
-    if(r_ntc <= 0.0f) {
-        return 25.0f;
-    }
-
-    /* Steinhart-Hart equation for NTC temperature */
-    const float r25 = BOARD_BATTERY_NTC_R25;
-    const float b_value = BOARD_BATTERY_NTC_B_VALUE;
-    const float t0_kelvin = 298.15f; /* 25°C in Kelvin */
-
-    float steinhart = logf(r_ntc / r25) / b_value + 1.0f / t0_kelvin;
-    float temp_kelvin = 1.0f / steinhart;
-    float temp_celsius = temp_kelvin - 273.15f;
-
-    return temp_celsius;
-}
-#endif
 
 static bool furi_hal_power_is_usb_present(void) {
     return furi_hal_power.last_supply_voltage >= FURI_HAL_POWER_USB_PRESENT_THRESHOLD_V;
@@ -621,10 +514,6 @@ float furi_hal_power_get_battery_current(FuriHalPowerIC ic) {
 }
 
 float furi_hal_power_get_battery_temperature(FuriHalPowerIC ic) {
-#ifdef BOARD_PIN_BATTERY_TEMP
-    /* Use NTC thermistor if available */
-    return furi_hal_power_ntc_read_temperature();
-#else
     if(ic == FuriHalPowerICCharger && furi_hal_bq25896_is_present()) {
         return (float)furi_hal_bq25896_get_temperature_mc() / 1000.0f;
     }
@@ -642,7 +531,6 @@ float furi_hal_power_get_battery_temperature(FuriHalPowerIC ic) {
         return (float)furi_hal_bq25896_get_temperature_mc() / 1000.0f;
     }
     return 25.0f;
-#endif
 }
 
 float furi_hal_power_get_usb_voltage(void) {

@@ -15,20 +15,7 @@
 
 /* ---- Hardware Button Pins ---- */
 #define BOARD_PIN_BUTTON_BOOT   0   /* BOOT button (active low) */
-
-/* ---- Battery ADC (TP4056 setup) ---- */
-/* Wiring: Battery+ -> 100k resistor -> GPIO3 -> 100k resistor -> GND */
-/* Voltage divider gives Vbat/2, so 4.2V -> 2.1V (safe for ADC) */
-#define BOARD_PIN_BATTERY_ADC   3   /* GPIO3 for battery voltage via voltage divider */
-#define BOARD_ADC_DIVIDER_RATIO (2.0f)  /* Vbat/2 for equal 100k/100k divider */
-
-/* ---- Battery Temperature (NTC thermistor) ---- */
-/* Wiring: NTC thermistor between BAT_TEMP pin and GND, 10k pull-up to 3.3V */
-/* Typical 10k NTC at 25°C, B-value = 3950 */
-#define BOARD_PIN_BATTERY_TEMP  4   /* GPIO4 for NTC temperature sensor */
-#define BOARD_BATTERY_NTC_B_VALUE   3950  /* B-value of the NTC thermistor */
-#define BOARD_BATTERY_NTC_R25       10000 /* NTC resistance at 25°C (10k ohms) */
-#define BOARD_BATTERY_NTC_R_PULLUP  10000 /* Pull-up resistor value (10k ohms) */
+#define BOARD_PIN_BATTERY_ADC   UINT16_MAX
 
 /* ---- LCD Pins (ST7789 via SPI) ---- */
 #define BOARD_PIN_LCD_MOSI      17  /* SDA */

@@ -33,7 +33,6 @@ idf_component_register(
     SRCS "app_main.c" "${ESP32_FAM_REGISTRY_C}"
     INCLUDE_DIRS "."
     REQUIRES furi furi_hal input notification gui locale storage loader desktop btshim
-    LDFRAGMENTS "main.lf"
 )
 
 if(NOT CMAKE_SCRIPT_MODE_FILE)
@@ -65,7 +64,6 @@ if(NOT CMAKE_SCRIPT_MODE_FILE)
         idf::subghz
         idf::toolbox
         idf::esp_http_client
-        idf::esp_http_server
         idf::lfrfid
         idf::mjs
     )

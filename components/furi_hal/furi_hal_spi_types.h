@@ -41,7 +41,6 @@ extern FuriHalSpiBus furi_hal_spi_bus_subghz;
 
 extern FuriHalSpiBusHandle furi_hal_spi_bus_handle_external;
 extern FuriHalSpiBusHandle furi_hal_spi_bus_handle_subghz;
-extern FuriHalSpiBusHandle furi_hal_spi_bus_handle_nrf24;
 
 #ifdef __cplusplus
 }

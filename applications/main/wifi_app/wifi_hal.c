@@ -39,7 +39,6 @@ typedef enum {
     WCMD_DISCONNECT,
     WCMD_BEACON_SPAM_START,
     WCMD_BEACON_SPAM_STOP,
-    WCMD_RUN_FN,
     WCMD_QUIT,
 } WifiCmdType;
 
@@ -74,10 +73,6 @@ typedef struct {
             WifiHalBeaconMode mode;
             char base_ssid[33];
         } beacon_start;
-        struct {
-            WifiHalWorkerFn fn;
-            void* arg;
-        } run_fn;
     };
     volatile bool* done;
     volatile bool* result;
@@ -306,12 +301,7 @@ static void wifi_worker_fn(void* arg) {
             if(!s_netif_initialized) {
                 esp_netif_init();
                 esp_event_loop_create_default();
-                /* Reuse the default STA netif if another app already created
-                 * it -- esp_netif_create_default_wifi_sta() asserts on dup. */
-                s_netif_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-                if(!s_netif_sta) {
-                    s_netif_sta = esp_netif_create_default_wifi_sta();
-                }
+                s_netif_sta = esp_netif_create_default_wifi_sta();
                 esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL);
                 esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL);
                 s_netif_initialized = true;
@@ -449,16 +439,10 @@ static void wifi_worker_fn(void* arg) {
             while(s_beacon_task) vTaskDelay(pdMS_TO_TICKS(10));
             break;
 
-        case WCMD_RUN_FN:
-            if(cmd.run_fn.fn) {
-                cmd.run_fn.fn(cmd.run_fn.arg);
-            }
-            break;
-
         case WCMD_QUIT:
             ESP_LOGI(TAG, "Worker quitting");
             if(cmd.done) *cmd.done = true;
-            vTaskDelete(NULL);
+            vTaskSuspend(NULL);
             return;
         }
 
@@ -499,14 +483,6 @@ static bool wifi_ensure_worker(void) {
 }
 
 void wifi_hal_preinit(void) {
-}
-
-bool wifi_hal_run_in_worker(WifiHalWorkerFn fn, void* arg) {
-    if(!fn) return false;
-    if(!wifi_ensure_worker()) return false;
-    WifiCmd cmd = {.type = WCMD_RUN_FN, .run_fn = {.fn = fn, .arg = arg}};
-    wifi_send_cmd_sync(&cmd);
-    return true;
 }
 
 bool wifi_hal_start(void) {
@@ -633,16 +609,9 @@ bool wifi_hal_is_started(void) {
 void wifi_hal_cleanup(void) {
     wifi_hal_stop();
     if(s_worker_task) {
-        TaskHandle_t old = s_worker_task;
         WifiCmd quit = {.type = WCMD_QUIT};
         wifi_send_cmd_sync(&quit);
         s_worker_task = NULL;
-        /* Wait until idle task has fully processed vTaskDelete before
-         * freeing the stack. Accessing it earlier crashes the next
-         * context switch (TCB still references the freed stack). */
-        while(eTaskGetState(old) != eDeleted) {
-            vTaskDelay(1);
-        }
     }
     if(s_worker_stack) {
         heap_caps_free(s_worker_stack);

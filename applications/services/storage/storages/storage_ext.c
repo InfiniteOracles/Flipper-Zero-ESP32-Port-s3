@@ -559,13 +559,7 @@ static bool storage_ext_dir_read(
     SDDir* file_data = storage_get_storage_file_data(file, storage);
 
     SDFileInfo _fileinfo;
-    // Skip FAT32 macOS resource-fork files (e.g. "._foo.fal") created when copying from macOS
-    do {
-        file->internal_error_id = f_readdir(file_data, &_fileinfo);
-        if(file->internal_error_id != FR_OK) break;
-        if(_fileinfo.fname[0] == 0) break;
-    } while(_fileinfo.fname[0] == '.' && _fileinfo.fname[1] == '_');
-
+    file->internal_error_id = f_readdir(file_data, &_fileinfo);
     file->error_id = storage_ext_parse_error(file->internal_error_id);
 
     if(fileinfo != NULL) {

@@ -9,9 +9,6 @@
 #include "views/airsnitch_view.h"
 #include "views/netscan_view.h"
 #include "views/beacon_view.h"
-#include "views/portscan_view.h"
-#include "views/evil_portal_view.h"
-#include "views/evil_portal_captured_view.h"
 
 static bool wifi_app_custom_event_callback(void* context, uint32_t event) {
     furi_assert(context);
@@ -58,11 +55,6 @@ static WifiApp* wifi_app_alloc(void) {
     view_dispatcher_add_view(app->view_dispatcher, WifiAppViewSniffer, app->view_sniffer);
     app->text_input = text_input_alloc();
     view_dispatcher_add_view(app->view_dispatcher, WifiAppViewTextInput, text_input_get_view(app->text_input));
-    app->variable_item_list = variable_item_list_alloc();
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        WifiAppViewVariableItemList,
-        variable_item_list_get_view(app->variable_item_list));
     app->view_crawler = crawler_view_alloc();
     crawler_view_set_view_dispatcher(app->view_dispatcher);
     view_dispatcher_add_view(app->view_dispatcher, WifiAppViewCrawler, app->view_crawler);
@@ -78,26 +70,11 @@ static WifiApp* wifi_app_alloc(void) {
     app->view_netscan = netscan_view_alloc();
     view_set_context(app->view_netscan, app->view_dispatcher);
     view_dispatcher_add_view(app->view_dispatcher, WifiAppViewNetscan, app->view_netscan);
-    app->view_portscan = portscan_view_alloc();
-    view_set_context(app->view_portscan, app->view_dispatcher);
-    view_dispatcher_add_view(app->view_dispatcher, WifiAppViewPortscan, app->view_portscan);
 
     // Beacon view allocation
     app->beacon_view_obj = beacon_view_alloc();
     app->view_beacon = beacon_view_get_view(app->beacon_view_obj);
     view_dispatcher_add_view(app->view_dispatcher, WifiAppViewBeacon, app->view_beacon);
-
-    // Evil Portal view allocation
-    app->evil_portal_view_obj = evil_portal_view_alloc();
-    app->view_evil_portal = evil_portal_view_get_view(app->evil_portal_view_obj);
-    view_dispatcher_add_view(app->view_dispatcher, WifiAppViewEvilPortal, app->view_evil_portal);
-
-    // Evil Portal captured-credentials view
-    app->evil_portal_captured_view_obj = evil_portal_captured_view_alloc();
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        WifiAppViewEvilPortalCaptured,
-        evil_portal_captured_view_get_view(app->evil_portal_captured_view_obj));
 
     app->ap_records = malloc(sizeof(WifiApRecord) * WIFI_APP_MAX_APS);
     app->ap_count = 0;
@@ -115,19 +92,9 @@ static WifiApp* wifi_app_alloc(void) {
     app->handshake_deauth_count = 0;
     app->handshake_complete = false;
     app->scanner_next_scene = WifiAppSceneApDetail;
-    app->ap_selected = false;
-    memset(&app->connected_ap, 0, sizeof(app->connected_ap));
     memset(app->crawler_domain, 0, sizeof(app->crawler_domain));
     memset(&app->crawler_state, 0, sizeof(app->crawler_state));
     memset(app->single_ssid, 0, sizeof(app->single_ssid));
-    memset(app->evil_portal_ssid, 0, sizeof(app->evil_portal_ssid));
-    app->evil_portal_channel = 0;
-    memset(app->evil_portal_templates, 0, sizeof(app->evil_portal_templates));
-    app->evil_portal_template_count = 0;
-    app->evil_portal_template_index = 0;
-    app->evil_portal_cred_head = 0;
-    app->evil_portal_cred_tail = 0;
-    app->evil_portal_cred_total = 0;
     return app;
 }
 
@@ -144,21 +111,16 @@ static void wifi_app_free(WifiApp* app) {
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewDeauther);
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewSniffer);
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewTextInput);
-    view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewVariableItemList);
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewCrawler);
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewHandshake);
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewHandshakeChannel);
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewAirSnitch);
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewNetscan);
     view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewBeacon);
-    view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewPortscan);
-    view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewEvilPortal);
-    view_dispatcher_remove_view(app->view_dispatcher, WifiAppViewEvilPortalCaptured);
     submenu_free(app->submenu);
     widget_free(app->widget);
     loading_free(app->loading);
     text_input_free(app->text_input);
-    variable_item_list_free(app->variable_item_list);
     ap_list_free(app->view_ap_list);
     deauther_view_free(app->view_deauther);
     sniffer_view_free(app->view_sniffer);
@@ -167,10 +129,7 @@ static void wifi_app_free(WifiApp* app) {
     handshake_channel_view_free(app->view_handshake_channel);
     airsnitch_view_free(app->view_airsnitch);
     netscan_view_free(app->view_netscan);
-    portscan_view_free(app->view_portscan);
     beacon_view_free(app->beacon_view_obj);
-    evil_portal_view_free(app->evil_portal_view_obj);
-    evil_portal_captured_view_free(app->evil_portal_captured_view_obj);
     scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);
     free(app->ap_records);
